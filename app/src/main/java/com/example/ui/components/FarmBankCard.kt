@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -63,12 +65,51 @@ fun FarmBankCard(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val cardNumber = "8600 4912 3456 7890"
-    val rawCardNumber = "8600491234567890"
+    // Foydalanuvchi taqdim etgan rasmiy karta raqami: 5614682706098243
+    val rawCardNumber = "5614682706098243"
+    val formattedCardNumber = "5614 6827 0609 8243"
     val cardHolder = "ABDUMALIKOV ABDURAHMON"
     val bankName = "AGROBANK ATB • «ITTIFOQ» FX"
 
     var isCopied by remember { mutableStateOf(false) }
+
+    fun copyToClipboard(source: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("Ittifoq Farm Card", rawCardNumber)
+        clipboard.setPrimaryClip(clip)
+        isCopied = true
+        onCopyToast("Karta raqami ($formattedCardNumber) nusxalandi!")
+    }
+
+    fun openPaymentApp(packageName: String, deepLink: String, webUrl: String, appName: String) {
+        copyToClipboard(appName)
+        try {
+            val deepIntent = Intent(Intent.ACTION_VIEW, Uri.parse(deepLink)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (context.packageManager.resolveActivity(deepIntent, 0) != null) {
+                context.startActivity(deepIntent)
+                return
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val launchIntent = context.packageManager.getLaunchIntentForPackage(packageName)
+            if (launchIntent != null) {
+                context.startActivity(launchIntent)
+                return
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(webUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(browserIntent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "$appName ilovasini ochib bo'lmadi", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Card(
         modifier = modifier
@@ -83,9 +124,9 @@ fun FarmBankCard(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            Color(0xFF0F3E16),
+                            Color(0xFF0D3B16),
                             Color(0xFF1B5E20),
-                            Color(0xFF002700)
+                            Color(0xFF002900)
                         )
                     )
                 )
@@ -129,23 +170,39 @@ fun FarmBankCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 // Card Number display
                 Text(
                     text = "Rasmiy to'lov kartasi (Click / Payme / Paynet):",
                     fontSize = 11.sp,
-                    color = Color.White.copy(alpha = 0.75f)
+                    color = Color.White.copy(alpha = 0.8f)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = cardNumber,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 2.sp,
-                    color = Color.White
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { copyToClipboard("Karta") }
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formattedCardNumber,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 2.sp,
+                        color = Color.White
+                    )
+                    Icon(
+                        imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
+                        contentDescription = "Nusxa olish",
+                        tint = if (isCopied) Color(0xFF81C784) else HarvestGold,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -163,7 +220,7 @@ fun FarmBankCard(
                         )
                         Text(
                             text = cardHolder,
-                            fontSize = 14.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -171,10 +228,10 @@ fun FarmBankCard(
 
                     Surface(
                         shape = RoundedCornerShape(6.dp),
-                        color = Color.White.copy(alpha = 0.15f)
+                        color = Color.White.copy(alpha = 0.18f)
                     ) {
                         Text(
-                            text = "UZCARD / HUMO",
+                            text = "HUMO / UZCARD",
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -183,22 +240,16 @@ fun FarmBankCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // COPY BUTTON (1-Click Copy card)
+                // 1-Click Copy card button
                 Button(
-                    onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        val clip = ClipData.newPlainText("Ittifoq Farm Card", rawCardNumber)
-                        clipboard.setPrimaryClip(clip)
-                        isCopied = true
-                        onCopyToast("Karta raqami nusxalandi: $cardNumber")
-                    },
+                    onClick = { copyToClipboard("Tugma") },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(46.dp)
+                        .height(44.dp)
                         .testTag("copy_card_number_button"),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isCopied) Color(0xFF2E7D32) else HarvestGold,
                         contentColor = if (isCopied) Color.White else Color(0xFF2E1C00)
@@ -207,52 +258,99 @@ fun FarmBankCard(
                     Icon(
                         imageVector = if (isCopied) Icons.Default.Check else Icons.Default.ContentCopy,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isCopied) "Karta raqami nusxalandi!" else "Karta raqamini nusxalash",
-                        fontSize = 13.sp,
+                        text = if (isCopied) "Karta raqami nusxalandi!" else "Karta raqamini nusxalash ($rawCardNumber)",
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Fast Launch Click or Payme Apps
+                // User requested: Click, Payme, and Paynet buttons
+                // "click , paynet , payme baton usitaga bosa shu karta bilan tolov qilish uchun usha ilovada ochsin"
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    OutlinedButton(
+                    // CLICK BUTTON
+                    Button(
                         onClick = {
-                            val intent = context.packageManager.getLaunchIntentForPackage("uz.click.uz")
-                                ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://click.uz"))
-                            context.startActivity(intent)
+                            openPaymentApp(
+                                packageName = "uz.click.uz",
+                                deepLink = "clickuz://payment?receiver=$rawCardNumber",
+                                webUrl = "https://my.click.uz/pay",
+                                appName = "Click"
+                            )
                         },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.4f))
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp)
+                            .testTag("open_click_app_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ClickBlue,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
                     ) {
-                        Text(text = "Click ochish", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "Click", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(3.dp))
                         Icon(imageVector = Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(12.dp))
                     }
 
-                    OutlinedButton(
+                    // PAYME BUTTON
+                    Button(
                         onClick = {
-                            val intent = context.packageManager.getLaunchIntentForPackage("uz.payme")
-                                ?: Intent(Intent.ACTION_VIEW, Uri.parse("https://payme.uz"))
-                            context.startActivity(intent)
+                            openPaymentApp(
+                                packageName = "uz.payme",
+                                deepLink = "payme://transfer?receiver=$rawCardNumber",
+                                webUrl = "https://payme.uz/fallback",
+                                appName = "Payme"
+                            )
                         },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.4f))
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp)
+                            .testTag("open_payme_app_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PaymeTeal,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
                     ) {
-                        Text(text = "Payme ochish", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "Payme", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Icon(imageVector = Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(12.dp))
+                    }
+
+                    // PAYNET BUTTON
+                    Button(
+                        onClick = {
+                            openPaymentApp(
+                                packageName = "uz.paynet.app",
+                                deepLink = "paynet://payment?card=$rawCardNumber",
+                                webUrl = "https://paynet.uz",
+                                appName = "Paynet"
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(40.dp)
+                            .testTag("open_paynet_app_button"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE65100),
+                            contentColor = Color.White
+                        ),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
+                    ) {
+                        Text(text = "Paynet", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(3.dp))
                         Icon(imageVector = Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(12.dp))
                     }
                 }

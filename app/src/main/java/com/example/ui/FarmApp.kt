@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -60,12 +61,24 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.platform.LocalContext
 import com.example.ui.components.AdvisoryCard
 import com.example.ui.components.AuthScreen
 import com.example.ui.components.DashboardCard
 import com.example.ui.components.FarmBankCard
+import com.example.ui.components.FarmerDebtCard
 import com.example.ui.components.FarmerSelectorDialog
+import com.example.ui.components.FarmNotificationHelper
 import com.example.ui.components.PaymentFormCard
+import com.example.ui.components.PaymentModalDialog
 import com.example.ui.components.ReceiptDialog
 import com.example.ui.components.TelegramSettingsDialog
 import com.example.ui.components.TransactionHistorySection
@@ -82,8 +95,29 @@ fun FarmApp(viewModel: FarmViewModel) {
     val allFarmers by viewModel.allFarmers.collectAsState()
     val allPayments by viewModel.allPayments.collectAsState()
 
+    val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var showFarmerSelector by remember { mutableStateOf(false) }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val notifGranted = results[android.Manifest.permission.POST_NOTIFICATIONS] ?: true
+        if (notifGranted) {
+            viewModel.showToast("To'lov eslatmalari bildirishnomasi yoqildi! 🔔")
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissionLauncher.launch(
+                arrayOf(
+                    android.Manifest.permission.POST_NOTIFICATIONS,
+                    android.Manifest.permission.READ_MEDIA_IMAGES
+                )
+            )
+        }
+    }
 
     LaunchedEffect(uiState.toastMessage) {
         uiState.toastMessage?.let { msg ->
@@ -101,7 +135,6 @@ fun FarmApp(viewModel: FarmViewModel) {
             isAuthenticating = uiState.isAuthenticating,
             onLoginUsernameChanged = viewModel::onLoginUsernameChanged,
             onLoginPasswordChanged = viewModel::onLoginPasswordChanged,
-            onQuickSelectAccount = viewModel::quickSelectLoginAccount,
             onLoginSubmit = viewModel::login
         )
         return
@@ -284,23 +317,218 @@ fun FarmApp(viewModel: FarmViewModel) {
         ) {
             when (uiState.currentTab) {
                 0 -> {
-                    // TAB 0: Dashboard Card + Bank Card (for Dehqon) + Payment Form
+                    // Payment Reminder Banner: Har oyning 1 dan 10 sanasigacha
                     item {
-                        DashboardCard(
-                            farmerName = uiState.currentFarmerName,
-                            dehqonId = uiState.currentDehqonId,
-                            landSizeHa = uiState.landSizeHectares,
-                            totalPaidUzs = uiState.cumulativePaidAmount,
-                            annualTargetUzs = uiState.annualPlanTargetUzs,
-                            remainingDebtUzs = uiState.cumulativeRemainingDebt,
-                            completionPercentage = uiState.cumulativePercentage,
-                            activePaymentType = uiState.selectedPaymentType,
-                            isOnline = uiState.isOnline
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFFFFF8E1),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFA000)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("monthly_payment_reminder_banner")
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.NotificationsActive,
+                                            contentDescription = null,
+                                            tint = Color(0xFFE65100),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "To'lov Muddati: Har oy 1–10 sanagacha",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFE65100)
+                                        )
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFFE65100)
+                                    ) {
+                                        Text(
+                                            text = "Faol Muddat",
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Text(
+                                    text = "Hurmatli dehqon! Har oyning 1-dan 10-sanasigacha to'lov qilish muddati. Iltimos oylik to'lovingizni kechiktirmasdan to'lang.",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF424242)
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            FarmNotificationHelper.sendPaymentReminderNotification(
+                                                context = context,
+                                                farmerName = if (isRahbar) "Dehqonlar" else currentUser.name
+                                            )
+                                            viewModel.showToast("To'lov eslatmasi xabarnomasi yuborildi! 🔔")
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(34.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+                                        contentPadding = PaddingValues(horizontal = 4.dp)
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Xabarnoma yuborish", fontSize = 11.sp)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                                                permissionLauncher.launch(
+                                                    arrayOf(
+                                                        android.Manifest.permission.POST_NOTIFICATIONS,
+                                                        android.Manifest.permission.READ_MEDIA_IMAGES
+                                                    )
+                                                )
+                                            } else {
+                                                viewModel.showToast("Ruxsatlar berilgan ✅")
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(34.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Security, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Ruxsatlarni so'rash", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    // Dehqon: Show official bank card with 1-click copy feature
-                    if (!isRahbar) {
+                    // TAB 0: Rahbar view vs Dehqon personal cabinet view
+                    if (isRahbar) {
+                        val dehqonsOnly = (allFarmers.filter { it.role == "DEHQON" }).ifEmpty {
+                            com.example.data.local.PredefinedAccounts.DEHQONS
+                        }
+                        val totalLand = dehqonsOnly.sumOf { it.landSizeHectares }
+                        val totalTarget = dehqonsOnly.sumOf { it.annualPlanTargetUzs }
+                        val totalPaid = allPayments.sumOf { it.paymentAmountUzs }
+                        val totalDebt = (totalTarget - totalPaid).coerceAtLeast(0L)
+
+                        // 1. Rahbar Profile & Farm Summary Card (@image2 avatar with golden R medal)
+                        item {
+                            Text(
+                                text = "Boshqaruv Paneli • Rahbar Profili",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = FarmGreenDark
+                            )
+                        }
+
+                        item {
+                            FarmerDebtCard(
+                                farmerName = "Abdumalikov Abdurahmon",
+                                landSizeHa = if (totalLand > 0) totalLand else 8.9,
+                                remainingDebtUzs = totalDebt,
+                                paidAmountUzs = totalPaid,
+                                annualPlanUzs = if (totalTarget > 0) totalTarget else 89_000_000L,
+                                paymentCount = allPayments.size,
+                                isRahbar = true,
+                                onPayClick = {
+                                    val firstDehqon = dehqonsOnly.firstOrNull() ?: currentUser
+                                    viewModel.openPaymentModal(firstDehqon, totalDebt)
+                                }
+                            )
+                        }
+
+                        // 2. All 11 Dehqon Cards (@image1 style) - fully scrollable!
+                        item {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "📋 Dehqonlar roʻyxati va toʻlov rejalari (${dehqonsOnly.size} nafar):",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = FarmGreenDark
+                            )
+                            Text(
+                                text = "Pastga suring ↓ Barcha 11 nafar dehqon to'liq ro'yxati (To'lov oynasini ochish uchun 'To'lov' tugmasini bosing):",
+                                fontSize = 11.sp,
+                                color = Color.Gray
+                            )
+                        }
+
+                        items(dehqonsOnly, key = { it.id }) { dehqon ->
+                            val dehqonPayments = allPayments.filter { it.dehqonId == dehqon.dehqonId }
+                            val dehqonPaid = dehqonPayments.sumOf { it.paymentAmountUzs }
+                            val dehqonDebt = (dehqon.annualPlanTargetUzs - dehqonPaid).coerceAtLeast(0L)
+
+                            FarmerDebtCard(
+                                farmerName = dehqon.name,
+                                landSizeHa = dehqon.landSizeHectares,
+                                remainingDebtUzs = dehqonDebt,
+                                paidAmountUzs = dehqonPaid,
+                                annualPlanUzs = dehqon.annualPlanTargetUzs,
+                                paymentCount = dehqonPayments.size,
+                                isRahbar = false,
+                                onPayClick = {
+                                    viewModel.openPaymentModal(dehqon, dehqonDebt)
+                                },
+                                onCardClick = {
+                                    viewModel.openPaymentModal(dehqon, dehqonDebt)
+                                }
+                            )
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "💳 To'lov Qabul Qilish (Tanlangan: ${uiState.currentFarmerName}):",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = FarmGreenDark
+                            )
+                        }
+                    } else {
+                        // Dehqon Personal Cabinet Card (@image1 style)
+                        item {
+                            FarmerDebtCard(
+                                farmerName = currentUser.name,
+                                landSizeHa = currentUser.landSizeHectares,
+                                remainingDebtUzs = uiState.cumulativeRemainingDebt,
+                                paidAmountUzs = uiState.cumulativePaidAmount,
+                                annualPlanUzs = currentUser.annualPlanTargetUzs,
+                                paymentCount = visiblePayments.size,
+                                isRahbar = false,
+                                onPayClick = {
+                                    viewModel.openPaymentModal(currentUser, uiState.cumulativeRemainingDebt)
+                                },
+                                onCardClick = {
+                                    viewModel.openPaymentModal(currentUser, uiState.cumulativeRemainingDebt)
+                                }
+                            )
+                        }
+
+                        // Dehqon: Show official bank card with 1-click copy feature & Click/Payme/Paynet
                         item {
                             FarmBankCard(
                                 onCopyToast = viewModel::showToast
@@ -384,6 +612,19 @@ fun FarmApp(viewModel: FarmViewModel) {
         ReceiptDialog(
             receipt = uiState.activeReceipt!!,
             onDismiss = viewModel::dismissReceiptDialog
+        )
+    }
+
+    // Modal Dialog: Dedicated Payment Window (Naqd / Karta) with receipt date verification
+    if (uiState.showPaymentModal && uiState.paymentModalFarmer != null) {
+        PaymentModalDialog(
+            farmer = uiState.paymentModalFarmer!!,
+            currentDebtUzs = uiState.paymentModalFarmerDebt,
+            isRahbar = isRahbar,
+            onDismiss = viewModel::closePaymentModal,
+            onSubmitPayment = { type, amount, cat, notes, receiptUri ->
+                viewModel.submitModalPayment(type, amount, cat, notes, receiptUri)
+            }
         )
     }
 

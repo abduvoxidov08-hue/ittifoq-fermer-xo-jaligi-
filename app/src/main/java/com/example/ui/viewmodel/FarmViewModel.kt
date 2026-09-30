@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -55,6 +56,9 @@ data class FarmUiState(
     val showReceiptDialog: Boolean = false,
     val isProcessingPayment: Boolean = false,
     val showTelegramSettingsDialog: Boolean = false,
+    val showPaymentModal: Boolean = false,
+    val paymentModalFarmer: FarmerEntity? = null,
+    val paymentModalFarmerDebt: Long = 0L,
     val telegramBotTokenInput: String = "",
     val telegramChatIdInput: String = "",
 
@@ -89,10 +93,20 @@ class FarmViewModel(
     val uiState: StateFlow<FarmUiState> = _uiState.asStateFlow()
 
     val allFarmers: StateFlow<List<FarmerEntity>> = repository.allFarmers
+        .map { list ->
+            if (list.size < com.example.data.local.PredefinedAccounts.ALL_ACCOUNTS.size) {
+                val byUser = list.associateBy { it.username.lowercase() }
+                com.example.data.local.PredefinedAccounts.ALL_ACCOUNTS.map { predefined ->
+                    byUser[predefined.username.lowercase()] ?: predefined
+                }
+            } else {
+                list
+            }
+        }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
+            initialValue = com.example.data.local.PredefinedAccounts.ALL_ACCOUNTS
         )
 
     val allPayments: StateFlow<List<TransactionReceipt>> = repository.allPayments
@@ -103,6 +117,11 @@ class FarmViewModel(
         )
 
     init {
+        // Ensure all predefined farmers are persisted in local DB
+        viewModelScope.launch {
+            repository.ensureAllPredefinedFarmers()
+        }
+
         // Monitor network state
         viewModelScope.launch {
             combine(networkMonitor.isOnline, networkMonitor.isManualOffline) { online, manualOffline ->
@@ -140,8 +159,8 @@ class FarmViewModel(
     }
 
     fun login() {
-        val username = _uiState.value.loginUsernameInput.trim()
-        val password = _uiState.value.loginPasswordInput.trim()
+        val username = _uiState.value.loginUsernameInput.replace("\u00A0", " ").trim()
+        val password = _uiState.value.loginPasswordInput.replace("\u00A0", " ").trim()
 
         if (username.isBlank() || password.isBlank()) {
             _uiState.update { it.copy(loginError = "Login va parolni kiriting") }
@@ -410,6 +429,83 @@ class FarmViewModel(
                     "To'lov oflayn saqlandi (Tarmoqqa ulanishda botga yuboriladi) 📥"
                 } else {
                     "To'lov qabul qilindi va chek shakllantirildi! 📄"
+                }
+                showToast(tgMsg)
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isProcessingPayment = false) }
+                showToast("Xatolik: ${e.message}")
+            }
+        }
+    }
+
+    fun openPaymentModal(farmer: FarmerEntity, currentDebt: Long) {
+        onFarmerSelected(farmer)
+        _uiState.update {
+            it.copy(
+                showPaymentModal = true,
+                paymentModalFarmer = farmer,
+                paymentModalFarmerDebt = currentDebt
+            )
+        }
+    }
+
+    fun closePaymentModal() {
+        _uiState.update {
+            it.copy(
+                showPaymentModal = false,
+                paymentModalFarmer = null
+            )
+        }
+    }
+
+    fun submitModalPayment(
+        paymentType: PaymentType,
+        amount: Long,
+        expenseCategory: String,
+        notes: String,
+        receiptUri: String?
+    ) {
+        val state = _uiState.value
+        val farmer = state.paymentModalFarmer ?: state.currentUser ?: return
+        if (amount <= 0) {
+            showToast("Iltimos, to'lov summasini kiriting")
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isProcessingPayment = true) }
+            try {
+                val receipt = repository.recordPayment(
+                    dehqonId = farmer.dehqonId,
+                    farmerName = farmer.name,
+                    landSizeHectares = farmer.landSizeHectares,
+                    paymentType = paymentType,
+                    paymentAmountUzs = amount,
+                    annualPlanTargetUzs = farmer.annualPlanTargetUzs,
+                    isOfflineMode = !state.isOnline,
+                    expenseCategory = if (state.isRahbar) expenseCategory else "",
+                    recordedByRole = if (state.isRahbar) "RAHBAR" else "DEHQON",
+                    notes = notes
+                )
+
+                _uiState.update {
+                    it.copy(
+                        isProcessingPayment = false,
+                        showPaymentModal = false,
+                        paymentModalFarmer = null,
+                        activeReceipt = receipt,
+                        showReceiptDialog = true
+                    )
+                }
+
+                refreshAdvisory()
+
+                val tgMsg = if (receipt.telegramSent) {
+                    "To'lov qabul qilindi va chek Telegram Botga yuborildi! ✅"
+                } else if (!state.isOnline) {
+                    "To'lov oflayn saqlandi (Tarmoqqa ulanishda botga yuboriladi) 📥"
+                } else {
+                    "To'lov muvaffaqiyatli qabul qilindi! 📄"
                 }
                 showToast(tgMsg)
             } catch (e: Exception) {

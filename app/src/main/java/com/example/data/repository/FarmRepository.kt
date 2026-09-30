@@ -38,6 +38,12 @@ class FarmRepository(
         return dao.getTotalPaidForFarmer(dehqonId).map { it ?: 0L }
     }
 
+    suspend fun ensureAllPredefinedFarmers() {
+        try {
+            dao.insertAllFarmers(com.example.data.local.PredefinedAccounts.ALL_ACCOUNTS)
+        } catch (_: Exception) {}
+    }
+
     suspend fun getFarmerByDehqonId(dehqonId: String): FarmerEntity? {
         return dao.getFarmerByDehqonId(dehqonId)
     }
@@ -47,7 +53,23 @@ class FarmRepository(
     }
 
     suspend fun authenticate(username: String, password: String): FarmerEntity? {
-        return dao.authenticate(username.trim(), password.trim())
+        val cleanUser = username.trim().lowercase()
+        val cleanPass = password.trim()
+
+        // 1. Try DB first
+        val fromDb = dao.authenticate(cleanUser, cleanPass)
+        if (fromDb != null) return fromDb
+
+        // 2. Check PredefinedAccounts fallback (always succeeds for valid credentials)
+        val predefined = com.example.data.local.PredefinedAccounts.findMatching(cleanUser, cleanPass)
+        if (predefined != null) {
+            try {
+                dao.insertFarmer(predefined)
+            } catch (_: Exception) { }
+            return dao.authenticate(cleanUser, cleanPass) ?: predefined
+        }
+
+        return null
     }
 
     suspend fun registerFarmer(
@@ -101,8 +123,7 @@ class FarmRepository(
         notes: String = ""
     ): TransactionReceipt {
         val now = System.currentTimeMillis()
-        val locale = Locale.Builder().setLanguage("uz").setRegion("UZ").build()
-        val dateFormat = SimpleDateFormat("dd-MMMM, yyyy HH:mm", locale)
+        val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault())
         val formattedDate = dateFormat.format(Date(now))
 
         val randomNum = Random().nextInt(9000) + 1000
