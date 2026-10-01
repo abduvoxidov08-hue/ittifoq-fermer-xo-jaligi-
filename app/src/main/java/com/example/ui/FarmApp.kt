@@ -499,6 +499,19 @@ fun FarmApp(viewModel: FarmViewModel) {
                             )
                         }
 
+                        // 3. Dehqonlar ma'lumoti (login/parol) kartalari
+                        item {
+                            Text(
+                                text = "👤 Dehqonlar ma'lumoti va kirish parollari:",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = FarmGreenDark
+                            )
+                        }
+                        items(dehqonsOnly, key = { "info_${it.id}" }) { dehqon ->
+                            com.example.ui.components.FarmerInfoCard(farmer = dehqon)
+                        }
+
                         item {
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
